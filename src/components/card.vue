@@ -1,0 +1,903 @@
+<template>
+  <el-row :gutter="20">
+      <el-col :span="18">
+        <div class="card-list">
+          <div
+            v-for="item in cards"
+            :key="item.id"
+            class="confirm-content"
+            :class="item.confidence === 'confirmed' ? 'verified' : 'ai-generated'"
+          >
+            <div class="confirm-title">{{ item.question }}</div>
+            
+            <div v-if="expandedIds.includes(item.id)" class="confirm-body">
+              <p>{{ item.answer }}</p>
+            </div>
+
+            <el-link
+              type="primary"
+              class="expand"
+              @click="toggleExpand(item.id)"
+            >
+              <el-icon><ArrowDown v-if="!expandedIds.includes(item.id)" /><ArrowUp v-else /></el-icon>
+              {{ expandedIds.includes(item.id) ? '收起详情' : '展开详情' }}
+            </el-link>
+
+            <div class="confirm-status">
+              <el-icon style="color: green" v-if="item.confidence === 'confirmed'"><Check /></el-icon>
+              <el-icon v-else><MagicStick /></el-icon>
+              <span class="verified-text">
+                {{ item.confidence === 'confirmed' ? '已验证' : 'AI生成' }}
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </el-col>
+
+      <el-col :span="6">
+        <div class="side-title">推荐问题</div>
+          <el-menu class="recommend-list">
+            <el-menu-item 
+              v-for="(item, index) in recommend_cards" 
+              :key="item.id" 
+              :index="item.id"
+              @click="goToCard(index)"
+            >
+              {{ item.id }} {{ item.question }}
+            </el-menu-item>
+          </el-menu>
+      </el-col>
+  </el-row>
+  <div class="asr-container">
+      <div class="asr-text">{{ micAsrText  || '🎤 请打开或等待麦克风语音...' }}</div>
+      <div class="asr-text">{{ sysAsrText  || '🎤 请打开或等待系统音频语音...' }}</div>
+
+      <el-button 
+          type="primary" 
+          round 
+          @click="toggleMicASR"
+      >
+          <div v-if="micActive === true"><el-icon><Microphone /></el-icon></div>
+          <div v-else><el-icon><Mute /></el-icon></div>
+          麦克风声音
+      </el-button>
+      <el-button 
+          type="success" 
+          round 
+          @click="toggleSysASR"
+      >
+          <div v-if="sysActive === true"><el-icon><Microphone /></el-icon></div>
+          <div v-else><el-icon><Mute /></el-icon></div>
+          系统声音
+      </el-button>
+  </div>
+  <!-- 聊天悬浮框 -->
+  <div class="chat-float-window" v-show="chatVisible">
+    <div class="container">
+      <div class="main">
+        <div class="box">
+          <div class="title" style="text-align: center; margin-bottom: 0px;">
+            <!-- <img src="../../../public/messages.png" alt class="logo" style="height: 5%; width: 50px;"/> -->
+            <span>对话窗口</span>
+          </div>
+          <div id="content" class="content" ref="contentRef">
+            <div v-for="(item, index) in info" :key="index">
+              <div class="info_r info_default" v-if="item.type == 'leftinfo'">
+                <img src="../../../public/people.png" alt="" class="circle circle_r" />
+                <div class="con_r con_text" style="min-height: 5px;">
+                  <div>{{ item.content }}</div>
+                </div>
+                <div class="time_r">{{ item.time }}</div>
+              </div>
+
+              <div class="info_l" v-else>
+                <div class="con_r con_text">
+                  <span class="con_l" style="min-height: 5px;">{{ item.content }}</span>
+                  <span class="circle circle_l">
+                    <img src="../../../public/chat.png" alt="" class="circle circle_r" />
+                  </span>
+                </div>
+                <div class="time_l">{{ item.time }}</div>
+              </div>
+            </div>
+              <!-- 实时识别展示 -->
+            <!-- <div class="info_l" v-if="micActive && micAsrText">
+              <div class="con_r con_text">
+                <span class="con_l">{{ micAsrText }}</span>
+                <span class="circle circle_l">
+                  <img src="../../../public/chat.png" alt="" class="circle circle_r" />
+                </span>
+              </div>
+              <div class="time_l">{{ getCurrentTime() }}</div>
+            </div>
+            <div class="info_r info_default" v-if="sysActive && sysAsrText">
+              <img src="../../../public/people.png" alt="" class="circle circle_r" />
+              <div class="con_r con_text">
+                <div>{{sysAsrText}}</div>
+              </div>
+              <div class="time_r">{{ getCurrentTime() }}</div>
+            </div> -->
+          </div>
+
+          <!-- <div class="setproblem">
+            <textarea
+              placeholder="Please enter your question..."
+              style="height: 68px; width: 100%; resize: none; padding-right: 80px; outline: none; border-color: #ccc; border-radius: 5px;"
+              id="text"
+              v-model="customerText"
+              @keyup.enter="sentMsg"
+            ></textarea>
+            <button @click="sentMsg" class="setproblems">
+              <span style="vertical-align: 4px;">Send</span>
+            </button>
+          </div> -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- 浮动按钮，控制展开收起 -->
+  <el-button 
+    class="chat-toggle-button" 
+    type="primary" 
+    circle 
+    @click="chatVisible = !chatVisible"
+  >
+    <el-icon v-if="chatVisible"><ArrowDown /></el-icon>
+    <el-icon v-else><ChatDotRound /></el-icon>
+  </el-button>
+</template>
+
+
+<script setup lang="ts">
+import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
+import axios from 'axios'
+import {
+  Search,
+  MagicStick,
+  Check,
+  ChatDotRound,
+  Star,
+  Microphone,
+  Mute,
+  ArrowDown,
+  ArrowUp
+} from '@element-plus/icons-vue'
+import { text } from '@fortawesome/fontawesome-svg-core'
+
+// 响应式状态
+const asrText = ref('')
+const asrFinalText = ref('')
+const asrActive = ref(false)
+const cards = ref<any[]>([])
+const recommend_cards = ref<any[]>([])
+const expandedIds = ref<number[]>([])
+
+const micAsrText = ref('')
+const micAsrFinalText = ref('')
+const micActive = ref(false)
+
+const sysAsrText = ref('')
+const sysAsrFinalText = ref('')
+const sysActive = ref(false)
+
+
+
+const chat = ref({
+  query: '我想了解下厦门大学课程有什么类型',
+  history: [
+    // { role: 'user', content: '你好' },
+    // { role: 'assistant', content: '你好！有什么我可以帮助你的吗？' }
+  ]
+})
+
+// 音频处理相关变量
+let micStream: MediaStream
+let sysStream: MediaStream
+const CHUNK_SIZE = 960
+
+const downsampleBuffer = (
+  buffer: Float32Array,
+  sampleRate: number,
+  targetSampleRate: number
+  ): Float32Array => {
+  if (targetSampleRate === sampleRate) return buffer
+  const ratio = sampleRate / targetSampleRate
+  const newLength = Math.round(buffer.length / ratio)
+  const result = new Float32Array(newLength)
+  let offsetResult = 0,
+    offsetBuffer = 0
+
+  while (offsetResult < result.length) {
+    const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio)
+    let accum = 0,
+      count = 0
+    for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+      accum += buffer[i]
+      count++
+    }
+    result[offsetResult++] = accum / count
+    offsetBuffer = nextOffsetBuffer
+  }
+
+  return result
+}
+
+const getRAGResult = async (chatParam: any) => {
+  try {
+    const response = await axios.post('/air/promptCard/getPrompts', chatParam)
+    console.log('RAG结果:', response.data.data[0])
+    const results = response.data.data[0].results || []
+
+    const maxId = Math.max(...cards.value.map(item => item.id), 0); // 获取当前cards数组中的最大ID
+    const newItems = results.map((item: any, index: number) => ({
+      ...item,
+      id: maxId + index + 1 // 生成新的id
+    }));
+    if (newItems.length > 0) {
+      toggleExpand(newItems[0].id);
+    }
+
+    // 将新的数据插入到cards数组的前面
+    cards.value.unshift(...newItems);
+    // newItems.forEach(item => {
+    //   toggleExpand(item.id);
+    // });
+
+    recommend_cards.value = results.map((item: any, index: number) => ({
+      ...item,
+      id: index + 1 
+    }))
+  } catch (error) {
+    console.error('响应失败:', error)
+  }
+}
+
+let micWebSocket: WebSocket
+let micProcessor: ScriptProcessorNode
+let micAudioContext: AudioContext
+let micSampleBuf = new Int16Array()
+
+function getSigna(ts) {
+  var apiKey = 'e7558fed3b8b89fb8d3f8c71951bbe88';
+  let md5 = CryptoJS.MD5(config.appid + ts).toString()
+  let sha1 = CryptoJS.HmacSHA1(md5, apiKey)
+  let base64 = CryptoJS.enc.Base64.stringify(sha1)
+  return encodeURIComponent(base64)
+}
+
+const startMicASR = async () => {
+  try {
+    micAsrText.value = ''
+    micAsrFinalText.value = ''
+
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    micAudioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const micSource = micAudioContext.createMediaStreamSource(micStream)
+    // const WebSocket = require('ws');
+    micWebSocket = new WebSocket('wss://www.funasr.com:10096/')
+    // micWebSocket = new WebSocket('ws://59.77.5.65:10096')
+
+    // micWebSocket = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/', {
+		// 		headers: {
+		// 			Authorization: `bearer sk-028b379fab454e27977baa5dfbc70169`,
+		// 			'X-DashScope-DataInspection': 'enable'
+		// 		}
+		// 	});
+    // micWebSocket = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/?Authorization=Bearer%20sk-028b379fab454e27977baa5dfbc70169');
+
+    // const micWebSocket = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/');
+
+    // micWebSocket.onopen = function() {
+    //   micWebSocket.send(JSON.stringify({
+    //       type: "auth",
+    //       token: "sk-028b379fab454e27977baa5dfbc70169"
+    //   }));
+    // };
+
+    // var Uri = "wss://dashscope.aliyuncs.com/api-ws/v1/inference";
+		// var apikey = 'sk-028b379fab454e27977baa5dfbc70169';
+    // micWebSocket = new WebSocket(Uri + "?Authorization=Bearer " + key);
+    
+    micWebSocket.binaryType = 'arraybuffer'
+
+    micWebSocket.onopen = () => {
+      micWebSocket.send(JSON.stringify({
+        chunk_size: [5, 10, 5],
+        wav_name: 'mic',
+        is_speaking: true,
+        chunk_interval: 10,
+        mode: '2pass'
+      }))
+    }
+
+    micWebSocket.onmessage = (event) => {
+      try {
+        const result = JSON.parse(event.data)
+        let text = result.text || result.result
+        const model = result.mode
+
+        if (model === '2pass-offline' || model === 'offline') {
+          text = removeLeadingPunctuation(text)
+          micAsrFinalText.value +=  text + '\n'
+          // micAsrText.value = micAsrFinalText.value
+          micAsrText.value = ''
+          chat.value.history.push({ role: 'assistant', content: text })
+          info.value.push({
+            type: "rightinfo",
+            content: text,
+            time: getCurrentTime()
+          })
+        } else {
+          micAsrText.value += text
+        }
+      } catch (e) {
+        console.log('mic 原始数据:', event.data)
+      }
+    }
+
+    micProcessor = micAudioContext.createScriptProcessor(4096, 1, 1)
+    micProcessor.onaudioprocess = (e) => {
+      const inputData = e.inputBuffer.getChannelData(0)
+      const downsampled = downsampleBuffer(inputData, 48000, 16000)
+      const pcm = new Int16Array(downsampled.length)
+
+      for (let i = 0; i < downsampled.length; i++) {
+        const s = Math.max(-1, Math.min(1, downsampled[i]))
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+      }
+
+      micSampleBuf = Int16Array.from([...micSampleBuf, ...pcm])
+      while (micSampleBuf.length >= CHUNK_SIZE) {
+        const chunk = micSampleBuf.slice(0, CHUNK_SIZE)
+        micSampleBuf = micSampleBuf.slice(CHUNK_SIZE)
+        if (micWebSocket.readyState === WebSocket.OPEN) {
+          micWebSocket.send(chunk.buffer)
+        }
+      }
+    }
+
+    micSource.connect(micProcessor)
+    micProcessor.connect(micAudioContext.destination)
+    micActive.value = true
+  } catch (err) {
+    console.log( err)
+    alert('无法启动麦克风识别，请检查麦克风权限')
+    micActive.value = false
+  }
+}
+
+const stopMicASR = () => {
+  if (micWebSocket?.readyState === WebSocket.OPEN) {
+    micWebSocket.send(JSON.stringify({ is_speaking: false }))
+    micWebSocket.close()
+  }
+  micProcessor?.disconnect()
+  micAudioContext?.close()
+  micStream?.getTracks().forEach(t => t.stop())
+  micSampleBuf = new Int16Array()
+  micActive.value = false
+}
+
+let sysWebSocket: WebSocket
+let sysProcessor: ScriptProcessorNode
+let sysAudioContext: AudioContext
+let sysSampleBuf = new Int16Array()
+
+const startSysASR = async () => {
+  try {
+    sysAsrText.value = ''
+    sysAsrFinalText.value = ''
+    // alert('请选择【浏览器标签页】，并勾选“共享标签页音频”')
+
+    sysStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
+    sysAudioContext = new (window.AudioContext || window.webkitAudioContext)()
+    const sysSource = sysAudioContext.createMediaStreamSource(sysStream)
+    sysWebSocket = new WebSocket('wss://www.funasr.com:10096/')
+    // sysWebSocket = new WebSocket('ws://59.77.5.65:10096')
+    // sysWebSocket = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/', {
+		// 		headers: {
+		// 			Authorization: `bearer sk-028b379fab454e27977baa5dfbc70169`,
+		// 			'X-DashScope-DataInspection': 'enable'
+		// 		}
+		// 	});
+    // console.log('sysWebSocket:', sysWebSocket)
+    
+    sysWebSocket.binaryType = 'arraybuffer'
+
+    sysWebSocket.onopen = () => {
+      sysWebSocket.send(JSON.stringify({
+        chunk_size: [5, 10, 5],
+        wav_name: 'sys',
+        is_speaking: true,
+        chunk_interval: 10,
+        mode: '2pass'
+      }))
+    }
+
+    sysWebSocket.onmessage = (event) => {
+      try {
+        const result = JSON.parse(event.data)
+        let text = result.text || result.result
+        const model = result.mode
+
+        if (model === '2pass-offline' || model === 'offline') {
+          text = removeLeadingPunctuation(text)
+          sysAsrFinalText.value += text + '\n'
+          // sysAsrText.value = sysAsrFinalText.value
+          sysAsrText.value = ''
+
+          chat.value.query = text
+          getRAGResult(chat.value)
+          // toggleExpand(1)
+          chat.value.history.push({
+            role: 'user',
+            content: text
+          })
+          info.value.push({
+            type: "leftinfo",
+            content: text,
+            time: getCurrentTime()
+          })
+        } else {
+          sysAsrText.value += text
+        }
+      } catch (e) {
+        console.log('sys 原始数据:', event.data)
+      }
+    }
+
+    sysProcessor = sysAudioContext.createScriptProcessor(4096, 1, 1)
+    sysProcessor.onaudioprocess = (e) => {
+      const inputData = e.inputBuffer.getChannelData(0)
+      const downsampled = downsampleBuffer(inputData, 48000, 16000)
+      const pcm = new Int16Array(downsampled.length)
+
+      for (let i = 0; i < downsampled.length; i++) {
+        const s = Math.max(-1, Math.min(1, downsampled[i]))
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+      }
+
+      sysSampleBuf = Int16Array.from([...sysSampleBuf, ...pcm])
+      while (sysSampleBuf.length >= CHUNK_SIZE) {
+        const chunk = sysSampleBuf.slice(0, CHUNK_SIZE)
+        sysSampleBuf = sysSampleBuf.slice(CHUNK_SIZE)
+        if (sysWebSocket.readyState === WebSocket.OPEN) {
+          sysWebSocket.send(chunk.buffer)
+        }
+      }
+    }
+
+    sysSource.connect(sysProcessor)
+    sysProcessor.connect(sysAudioContext.destination)
+    sysActive.value = true
+  } catch (err) {
+    // alert('⚠️ 当前浏览器或系统可能不支持系统音频，请选择标签页并勾选共享音频')
+    sysActive.value = false
+  }
+}
+
+const stopSysASR = () => {
+  if (sysWebSocket?.readyState === WebSocket.OPEN) {
+    sysWebSocket.send(JSON.stringify({ is_speaking: false }))
+    sysWebSocket.close()
+  }
+  sysProcessor?.disconnect()
+  sysAudioContext?.close()
+  sysStream?.getTracks().forEach(t => t.stop())
+  sysSampleBuf = new Int16Array()
+  sysActive.value = false
+}
+
+const toggleMicASR = () => {
+  micActive.value ? stopMicASR() : startMicASR()
+}
+const toggleSysASR = () => {
+  sysActive.value ? stopSysASR() : startSysASR()
+}
+
+const toggleExpand = (id: number) => {
+  console.log(id)
+  const index = expandedIds.value.indexOf(id)
+  if (index === -1) {
+    expandedIds.value.push(id)
+  } else {
+    expandedIds.value.splice(index, 1)
+  }
+}
+
+const goToCard = (index: number) => {
+  cards.value.unshift({
+    id: cards.value.length + 1,
+    question: recommend_cards.value[index].question,
+    answer: recommend_cards.value[index].answer,
+    confidence: recommend_cards.value[index].confidence
+  })
+  toggleExpand(cards.value[0].id)
+  // const cardElement = document.getElementById('card-' + (index + 1)) // index + 1 确保与 cards 的 id 匹配
+  // if (cardElement) {
+  //   cardElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  // }
+}
+
+function removeLeadingPunctuation(text: string): string {
+  const punctuationRegex = /^[，。！？、：；""''（）【】《》…—,.!?:;"'()[\]{}<>]/;
+  if (punctuationRegex.test(text.charAt(0))) {
+    return text.substring(1);
+  }
+  return text;
+}
+
+
+// 生命周期钩子
+onMounted(() => {
+  // text.value = 'Hello World'
+  // removeLeadingPunctuation(text.value)
+  // console.log('text:', text.value)
+// getQa()
+// toggleExpand(1)
+// getRAGResult(chat.value)
+})
+
+onBeforeUnmount(() => {
+  stopMicASR()
+  stopSysASR()
+// stopASR()
+})
+
+// 聊天窗口显示状态
+const chatVisible = ref(true)
+
+// 聊天内容
+const info = ref([
+  // {
+  //     type: 'rightinfo',
+  //     content: '你好，请问我有什么可以帮助您的？',
+  //     time: getCurrentTime()
+  // },
+  // {
+  //     type: "rightinfo",
+  //     time: getCurrentTime(),
+  //     name: "robot",
+  //     content: "Can you tell us about the plan for upgrading Malaysia's electronics industry?"
+  // }
+])
+
+const contentRef = ref<HTMLElement | null>(null)
+
+// 正确的监听写法
+watch(info, () => {
+  scrollToBottom()
+}, { deep: true })
+
+// 滚动函数
+const scrollToBottom = () => {
+  nextTick(() => {
+    setTimeout(() => {
+      if (contentRef.value) {
+        contentRef.value.scrollTop = contentRef.value.scrollHeight
+      }
+    }, 50)
+  })
+}
+
+function getCurrentTime() {
+  const now = new Date();
+  const hours = String(now.getHours()).padStart(2, '0');
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  return `${hours}:${minutes}`;
+}
+
+
+// 输入框内容
+const customerText = ref('')
+
+// 发送消息
+const sentMsg = () => {
+  if (!customerText.value.trim()) return
+
+  info.value.push({
+    type: 'rightinfo',
+    content: customerText.value,
+    time: new Date().toLocaleTimeString(),
+  })
+
+  // 模拟机器人回复
+  setTimeout(() => {
+    info.value.push({
+      type: 'leftinfo',
+      content: 'This is an automated reply to: ' + customerText.value,
+      time: new Date().toLocaleTimeString(),
+      question: [],
+    })
+  }, 1000)
+
+  customerText.value = ''
+}
+
+// 点击推荐问题
+const clickRobot = (text, id) => {
+  customerText.value = text
+  sentMsg()
+}
+</script>
+
+
+<style scoped>
+.asr-container {
+position: fixed;
+bottom: 40px;
+left: 50%;
+transform: translateX(-50%);
+text-align: center;
+}
+.asr-text {
+background: rgba(0, 0, 0, 0.7);
+color: #fff;
+padding: 8px 16px;
+border-radius: 10px;
+margin-bottom: 10px;
+font-size: 14px;
+max-width: 90vw;
+word-wrap: break-word;
+white-space: pre-line;  /* 保留换行符 */
+}
+.mic-button {
+font-size: 20px;
+width: 50px;
+height: 35px;
+}
+
+.app-container {
+font-family: 'Helvetica Neue', sans-serif;
+}
+.header {
+display: flex;
+justify-content: space-between;
+align-items: center;
+padding: 0 20px;
+background: white;
+border-bottom: 1px solid #eee;
+height: 60px;
+}
+.logo {
+display: flex;
+align-items: center;
+font-weight: bold;
+font-size: 18px;
+}
+.nav {
+display: flex;
+gap: 30px;
+}
+.nav-item {
+cursor: pointer;
+color: #666;
+}
+.nav-item.active {
+color: #409EFF;
+font-weight: bold;
+}
+.user {
+display: flex;
+align-items: center;
+gap: 10px;
+}
+.main {
+background: #f9f9f9;
+padding: 10px;
+}
+.card {
+margin-bottom: 20px;
+position: relative;
+}
+.verified {
+border-left: 4px solid #67C23A;
+}
+.ai-generated {
+border-left: 4px solid #E6A23C;
+}
+.card-title {
+font-size: 16px;
+font-weight: bold;
+margin-bottom: 10px;
+}
+.card-footer {
+display: flex;
+gap: 10px;
+align-items: center;
+margin-top: 10px;
+}
+.badge {
+position: absolute;
+top: 10px;
+right: 10px;
+color: #E6A23C;
+display: flex;
+align-items: center;
+gap: 5px;
+}
+.expand {
+display: inline-block;
+margin-top: 10px;
+}
+.side-title {
+font-weight: bold;
+margin-bottom: 10px;
+}
+.recommend-list {
+background: white;
+border: 1px solid #eee;
+}
+.footer {
+display: flex;
+align-items: center;
+gap: 10px;
+padding-top: 20px;
+font-size: 14px;
+color: #666;
+}
+.card-list {
+display: flex;
+flex-direction: column;
+gap: 20px;
+}
+
+.card-title {
+font-weight: bold;
+font-size: 16px;
+margin-bottom: 10px;
+}
+
+.card-answer {
+margin: 10px 0;
+color: #606266;
+}
+
+.expand {
+margin-bottom: 10px;
+display: inline-block;
+}
+
+.badge {
+display: flex;
+align-items: center;
+gap: 5px;
+font-size: 13px;
+color: #67c23a;
+}
+
+.card.ai-generated .badge {
+color: #409eff;
+}
+.confirm-content {
+border: 2px solid #4CAF50;
+border-radius: 10px;
+padding: 20px;
+position: relative;
+background-color: #fff;
+}
+
+.confirm-title {
+font-weight: bold;
+font-size: 18px;
+margin-bottom: 10px;
+}
+
+.confirm-body {
+font-size: 14px;
+line-height: 1.8;
+color: #333;
+}
+
+.collapse-link {
+display: inline-block;
+margin-top: 10px;
+font-size: 14px;
+}
+
+.confirm-status {
+position: absolute;
+top: 15px;
+right: 20px;
+display: flex;
+align-items: center;
+color: #4CAF50;
+font-size: 14px;
+}
+.verified {
+border-color: #4baf4f; /* 绿色边框 */
+}
+
+.ai-generated {
+border-color: #ffc107; /* 黄色边框 */
+}
+
+/* .chat-float-window {
+  position: fixed;
+  bottom: 60px;
+  right: 20px;
+  width: 450px;
+  max-width: 50vh;
+  max-height: 35vh;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  z-index: 9999;
+  overflow: hidden;
+}
+
+.container, .main, .box {
+  height: 100%;
+  padding: 0px;
+}
+
+#content {
+  height: auto;
+  max-height: 300px;
+  overflow-y: auto;
+  padding: 10px;
+} */
+.chat-float-window {
+  position: fixed;
+  bottom: 60px;
+  right: 20px;
+  width: 450px;
+  height: 400px;
+  max-width: 50vh;
+  max-height: 50vh;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column; /* 重点！让内部内容垂直排列 */
+  overflow: hidden;
+}
+
+.container, .main, .box {
+  height: 100%;
+  min-height: 0; /* 修复flex项的最小高度问题 */
+  display: flex;
+  flex-direction: column;
+  padding: 0px;
+}
+
+#content {
+  flex: 1; /* 占据剩余空间 */
+  min-height: 0; /* 允许内容收缩 */
+  overflow-y: auto;
+  padding: 10px;
+  box-sizing: border-box; /* 包含padding在高度计算中 */
+}
+
+.setproblem {
+  padding: 10px;
+  background: #f5f5f5;
+}
+.setproblems {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  background-color: #409eff;
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 6px 20px;
+  cursor: pointer;
+}
+.chat-toggle-button {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 10000;
+}
+.con_text {
+  font-size: 12px;
+}
+
+</style>
