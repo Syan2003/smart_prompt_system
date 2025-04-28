@@ -276,31 +276,8 @@ const startMicASR = async () => {
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
     micAudioContext = new (window.AudioContext || window.webkitAudioContext)()
     const micSource = micAudioContext.createMediaStreamSource(micStream)
-    // const WebSocket = require('ws');
     micWebSocket = new WebSocket('wss://www.funasr.com:10096/')
-    // micWebSocket = new WebSocket('ws://59.77.5.65:10096')
 
-    // micWebSocket = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/', {
-		// 		headers: {
-		// 			Authorization: `bearer sk-028b379fab454e27977baa5dfbc70169`,
-		// 			'X-DashScope-DataInspection': 'enable'
-		// 		}
-		// 	});
-    // micWebSocket = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/?Authorization=Bearer%20sk-028b379fab454e27977baa5dfbc70169');
-
-    // const micWebSocket = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/');
-
-    // micWebSocket.onopen = function() {
-    //   micWebSocket.send(JSON.stringify({
-    //       type: "auth",
-    //       token: "sk-028b379fab454e27977baa5dfbc70169"
-    //   }));
-    // };
-
-    // var Uri = "wss://dashscope.aliyuncs.com/api-ws/v1/inference";
-		// var apikey = 'sk-028b379fab454e27977baa5dfbc70169';
-    // micWebSocket = new WebSocket(Uri + "?Authorization=Bearer " + key);
-    
     micWebSocket.binaryType = 'arraybuffer'
 
     micWebSocket.onopen = () => {
@@ -396,15 +373,6 @@ const startSysASR = async () => {
     sysAudioContext = new (window.AudioContext || window.webkitAudioContext)()
     const sysSource = sysAudioContext.createMediaStreamSource(sysStream)
     sysWebSocket = new WebSocket('wss://www.funasr.com:10096/')
-    // sysWebSocket = new WebSocket('ws://59.77.5.65:10096')
-    // sysWebSocket = new WebSocket('wss://dashscope.aliyuncs.com/api-ws/v1/inference/', {
-		// 		headers: {
-		// 			Authorization: `bearer sk-028b379fab454e27977baa5dfbc70169`,
-		// 			'X-DashScope-DataInspection': 'enable'
-		// 		}
-		// 	});
-    // console.log('sysWebSocket:', sysWebSocket)
-    
     sysWebSocket.binaryType = 'arraybuffer'
 
     sysWebSocket.onopen = () => {
