@@ -50,11 +50,10 @@ const routes = [
         redirect: '/card',
         children:[
             {path: '/card', component: Card },
+            { path: '/card/:id', component: Card },
             {path: '/knowledge', component: Knowledge },
             {path: '/doc', component: Doc },
             {path: '/setting', component: Setting },
-            // {path: '/schedule', component: Schedule },
-            // {path: '/chat', component: Chat },
             {path: '/UserCenter', component: UserCenter },
         ]
     },

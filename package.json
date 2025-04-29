@@ -19,6 +19,7 @@
     "@vue-stripe/vue-stripe": "^4.5.0",
     "axios": "^1.5.1",
     "cfturnstile-vue3": "^1.0.0",
+    "crypto-js": "^4.2.0",
     "element-plus": "^2.4.1",
     "less": "^4.2.0",
     "qs": "^6.11.2",

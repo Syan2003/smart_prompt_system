@@ -88,7 +88,7 @@ export default {
   }
   .main {
     background: #f9f9f9;
-    padding: 20px;
+    /* padding: 0px; */
   }
   .card {
     margin-bottom: 20px;
