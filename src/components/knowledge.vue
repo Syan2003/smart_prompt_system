@@ -43,7 +43,7 @@
               cancel-button-text="No"
               :icon="InfoFilled"
               icon-color="#626AEF"
-              title="Set to Verified"
+              title="设置为已验证"
               @confirm="VerifyDialog(scope.row)"
               @cancel="cancelEvent"
             >
@@ -209,18 +209,18 @@ export default {
           activeFilter: 'all',
           search: '',
           tableData: [
-            {
-                question: '如何导出知识库数据?',
-                answer: '点击导出按钮，选择导出格式...',
-                confidence: 'confirmed',
-                statusLabel: '已验证',
-            },
-            {
-                question: '系统支持多少种语言?',
-                answer: '目前支持中文和英文两种语言...',
-                confidence: 'generated',
-                statusLabel: '待验证',
-            }
+            // {
+            //     question: '如何导出知识库数据?',
+            //     answer: '点击导出按钮，选择导出格式...',
+            //     confidence: 'confirmed',
+            //     statusLabel: '已验证',
+            // },
+            // {
+            //     question: '系统支持多少种语言?',
+            //     answer: '目前支持中文和英文两种语言...',
+            //     confidence: 'generated',
+            //     statusLabel: '待验证',
+            // }
           ],
           okDeleteCard: false,         // 控制弹窗显示
           rowToDelete: null,            // 要删除的当前行

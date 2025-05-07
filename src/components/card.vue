@@ -44,14 +44,15 @@
               :index="item.id"
               @click="goToCard(index)"
             >
-              {{ item.id }} {{ item.question }}
+            <span class="recommend-text">{{ item.id }} {{ item.question }}</span>
+              <!-- {{ item.id }} {{ item.question }} -->
             </el-menu-item>
           </el-menu>
       </el-col>
   </el-row>
   <div class="asr-container">
-      <div class="asr-text">{{ micAsrText  || '🎤 请打开或等待麦克风语音...' }}</div>
-      <div class="asr-text">{{ sysAsrText  || '🎤 请打开或等待系统音频语音...' }}</div>
+      <div class="asr-text">{{ micAsrText  || '🎤 请打开麦克风语音...' }}</div>
+      <div class="asr-text">{{ sysAsrText  || '🎤 请打开系统音频语音...' }}</div>
 
       <el-button 
           type="primary" 
@@ -84,7 +85,8 @@
           <div id="content" class="content" ref="contentRef">
             <div v-for="(item, index) in info" :key="index">
               <div class="info_r info_default" v-if="item.type == 'leftinfo'">
-                <img src="../../../public/people.png" alt="" class="circle circle_r" />
+                <!-- <img src="../../../public/people.png" alt="" class="circle circle_r" /> -->
+                <img src="/people.png" alt="" class="circle circle_r" />
                 <div class="con_r con_text" style="min-height: 5px;">
                   <div>{{ item.content }}</div>
                 </div>
@@ -95,7 +97,7 @@
                 <div class="con_r con_text">
                   <span class="con_l" style="min-height: 5px;">{{ item.content }}</span>
                   <span class="circle circle_l">
-                    <img src="../../../public/chat.png" alt="" class="circle circle_r" />
+                    <img src="/chat.png" alt="" class="circle circle_r" />
                   </span>
                 </div>
                 <div class="time_l">{{ item.time }}</div>
@@ -233,6 +235,11 @@ const downsampleBuffer = (
 
 const getRAGResult = async (chatParam: any) => {
   try {
+    const chatId = window.sessionStorage.getItem('chatId')
+    console.log("chatParam:", chatParam)
+    if(chatId){
+      chatParam.id = chatId
+    }
     const response = await axios.post('/air/promptCard/getPromptCards', chatParam)
     // console.log('RAG结果:', response.data.data[0])
     const results = response.data.data.results || []
@@ -244,11 +251,15 @@ const getRAGResult = async (chatParam: any) => {
     cards.value.unshift(...newItems);
     if (newItems.length > 0) {
       toggleExpand(newItems[0].id);
+      recommend_cards.value = results.map((item: any, index: number) => ({
+        ...item,
+        id: index + 1 
+      }))
     }
-    recommend_cards.value = results.map((item: any, index: number) => ({
-      ...item,
-      id: index + 1 
-    }))
+    // recommend_cards.value = results.map((item: any, index: number) => ({
+    //   ...item,
+    //   id: index + 1 
+    // }))
 
     // 更新 chat.chatHistory 最后一项的 replyIds
     const replyIds = response.data.data.replyIds || []
@@ -256,14 +267,80 @@ const getRAGResult = async (chatParam: any) => {
     if (lastIndex >= 0) {
       chat.value.chatHistory[lastIndex].replyIds = replyIds
     }
-    console.log('chat.id:', id)
-    if(!id){
-      console.log('chat.id:', id)
-      router.push(`/card/${response.data.data.chatId}`)
+    // console.log('chat.id:', id)
+    // if(!id){
+    //   console.log('chat.id:', id)
+    //   router.push(`/card/${response.data.data.chatId}`)
+    // }
+    // console.log('chat.chatHistory:', chat.value.chatHistory)
+    
+    if(!chatId){
+      console.log('chatId:', chatId)
+      window.sessionStorage.setItem('chatId',response.data.data.chatId)
     }
-    console.log('chat.chatHistory:', chat.value.chatHistory)
   } catch (error) {
     console.error('响应失败:', error)
+  }
+}
+
+const saveChat = async (chatParam: any) => {
+  try {
+    const chatId = window.sessionStorage.getItem('chatId')
+    console.log("chatParam:", chatParam)
+    if(chatId){
+      chatParam.id = chatId
+    }
+    const response = await axios.post('/air/promptCard/getPromptCards', chatParam)
+    console.log('结果:', response)
+    
+    if(!chatId){
+      console.log('chatId:', chatId)
+      window.sessionStorage.setItem('chatId',response.data.data.chatId)
+    }
+  } catch (error) {
+    console.error('响应失败:', error)
+  }
+}
+
+// 根据id获取对话记录的函数
+const getChatIDList = async (id) => {
+  console.log('获取对话记录')
+  try {
+    const response = await axios.get('/air/promptCard/getChatById/' + id)
+    if (response.data.code === 200) {
+      const chatData = response.data.data
+      console.log('对话记录:', chatData)
+      chat.value.chatHistory = chatData.chatHistory
+      info.value = []
+      chat.value.chatHistory.forEach(item => {
+        let resultText = item.content // 获取当前内容
+        let infoType = item.role === "user" ? "leftinfo" : "rightinfo" // 根据 role 判断类型
+
+        // 推入 info.value
+        info.value.push({
+          type: infoType,
+          content: resultText,
+          time: getCurrentTime() // 假设 getCurrentTime() 返回当前时间
+        })
+      })
+
+      // 倒序赋值 chatHistory
+      cards.value = chatData.reply[0].data
+      // console.log('对话记录:', chatData.reply[0].data)
+      cards.value = chatData.reply[0].data.map((item, index) => ({
+        ...item,
+        id: index + 1 
+      }))
+      recommend_cards.value = cards.value
+        .slice(0, 3)
+      // console.log('推荐卡片:', recommend_cards.value)
+    } else {
+      console.error('请求失败:', response.data.msg)
+    }
+  } catch (err) {
+    console.error('请求异常:', err)
+  } finally {
+    console.log('请求结束')
   }
 }
 
@@ -289,87 +366,201 @@ function getWebSocketUrl() {
 
 const startMicASR = async () => {
   try {
-    micAsrText.value = ''
-    micAsrFinalText.value = ''
+    micAsrText.value = '';
+    micAsrFinalText.value = '';
 
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    micAudioContext = new (window.AudioContext || window.webkitAudioContext)()
-    const micSource = micAudioContext.createMediaStreamSource(micStream)
+    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+    const micSource = micAudioContext.createMediaStreamSource(micStream);
 
-    const url = getWebSocketUrl()
-    micWebSocket = new WebSocket(url)
+    // const url = 'ws://localhost:3001'; // 改为你本地后端地址
+    // const url = 'http://localhost:8080'
+    const url = 'wss://7f8c-2001-da8-e800-a3d8-35e6-ca73-10f8-d787.ngrok-free.app/asr'
+    micWebSocket = new WebSocket(url);
+    micWebSocket.binaryType = 'arraybuffer';
 
-    // micWebSocket = new WebSocket('wss://www.funasr.com:10096/')
-
-    micWebSocket.binaryType = 'arraybuffer'
-
+    // 连接建立后，通知后端启动识别任务
     micWebSocket.onopen = () => {
+      console.log("✅ 前端与后端连接建立");
       micWebSocket.send(JSON.stringify({
-        chunk_size: [5, 10, 5],
-        wav_name: 'mic',
-        is_speaking: true,
-        chunk_interval: 10,
-        mode: '2pass'
-      }))
-    }
+        type: 'start-asr'
+      }));
+    };
+    micWebSocket.onerror = (e) => {
+      console.error("❌ WebSocket 错误", e);
+      alert('无法启动麦克风识别，请检查麦克风权限');
+      micActive.value = false;
+      window.sessionStorage.setItem('micActive',false)
+    };
 
+    // 接收识别结果
     micWebSocket.onmessage = (event) => {
-      try {
-        const result = JSON.parse(event.data)
-        let text = result.text || result.result
-        const model = result.mode
-
-        if (model === '2pass-offline' || model === 'offline') {
+      const data = JSON.parse(event.data);
+      const jsonData = JSON.parse(event.data);
+      if (jsonData.data.endTime === null) {
+        micAsrText.value = jsonData.data.text; // 实时中间结果
+        // console.log('实时中间识别：', jsonData.data);
+      } else if (jsonData.data.endTime !== null) {
+          let text = jsonData.data.text; // 最终识别结果
           text = removeLeadingPunctuation(text)
           micAsrFinalText.value +=  text + '\n'
-          // micAsrText.value = micAsrFinalText.value
-          micAsrText.value = ''
+          micAsrText.value = ' '
           chat.value.chatHistory.push({ role: 'assistant', content: text })
+          // getRAGResult(chat.value)
+          // saveChat(chat.value)
           info.value.push({
             type: "rightinfo",
             content: text,
             time: getCurrentTime()
           })
-        } else {
-          micAsrText.value += text
-        }
-      } catch (e) {
-        console.log('mic 原始数据:', event.data)
+          // console.log('实时识别：', jsonData.data);
+      } else if (jsonData.status === 'error') {
+        // console.error('识别错误:', jsonData.message);
+        micActive.value = false;
+        window.sessionStorage.setItem('micActive',false)
       }
-    }
+      // if (jsonData.type === 'asr-interim-result') {
+      //   micAsrText.value = jsonData.result; // 实时中间结果
+      //   console.log('实时中间识别：', jsonData.result);
+      // } else if (jsonData.type === 'asr-final-result') {
+      //     let text = jsonData.result; // 最终识别结果
+      //     text = removeLeadingPunctuation(text)
+      //     micAsrFinalText.value +=  text + '\n'
+      //     micAsrText.value = ''
+      //     chat.value.chatHistory.push({ role: 'assistant', content: text })
+      //     info.value.push({
+      //       type: "rightinfo",
+      //       content: text,
+      //       time: getCurrentTime()
+      //     })
+      //     console.log('实时识别：', jsonData.result);
+      // } else if (jsonData.type === 'error') {
+      //   console.error('识别错误:', jsonData.message);
+      //   micActive.value = false;
+      // }
+    };
 
-    micProcessor = micAudioContext.createScriptProcessor(4096, 1, 1)
+    // 录音处理逻辑（保持原样）
+    micProcessor = micAudioContext.createScriptProcessor(4096, 1, 1);
     micProcessor.onaudioprocess = (e) => {
-      const inputData = e.inputBuffer.getChannelData(0)
-      const downsampled = downsampleBuffer(inputData, 48000, 16000)
-      const pcm = new Int16Array(downsampled.length)
+      const inputData = e.inputBuffer.getChannelData(0);
+      const downsampled = downsampleBuffer(inputData, 48000, 16000);
+      const pcm = new Int16Array(downsampled.length);
 
       for (let i = 0; i < downsampled.length; i++) {
-        const s = Math.max(-1, Math.min(1, downsampled[i]))
-        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+        const s = Math.max(-1, Math.min(1, downsampled[i]));
+        pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
       }
 
-      micSampleBuf = Int16Array.from([...micSampleBuf, ...pcm])
+      micSampleBuf = Int16Array.from([...micSampleBuf, ...pcm]);
       while (micSampleBuf.length >= CHUNK_SIZE) {
-        const chunk = micSampleBuf.slice(0, CHUNK_SIZE)
-        micSampleBuf = micSampleBuf.slice(CHUNK_SIZE)
+        const chunk = micSampleBuf.slice(0, CHUNK_SIZE);
+        micSampleBuf = micSampleBuf.slice(CHUNK_SIZE);
+
         if (micWebSocket.readyState === WebSocket.OPEN) {
-          micWebSocket.send(chunk.buffer)
+          micWebSocket.send(chunk.buffer); // 二进制发送给后端
         }
       }
-    }
+    };
 
-    micSource.connect(micProcessor)
-    micProcessor.connect(micAudioContext.destination)
-    micActive.value = true
+    micSource.connect(micProcessor);
+    micProcessor.connect(micAudioContext.destination);
+    micActive.value = true;
+    window.sessionStorage.setItem('micActive',true)
+
   } catch (err) {
-    console.log( err)
-    alert('无法启动麦克风识别，请检查麦克风权限')
-    micActive.value = false
+    console.error(err);
+    alert('无法启动麦克风识别，请检查麦克风权限');
+    micActive.value = false;
+    window.sessionStorage.setItem('micActive',false)
   }
-}
+};
 
-// const startMicASR = async () => {
+
+// const startMicASR = async () => { // 原科大讯飞免费的asr
+//   try {
+//     micAsrText.value = ''
+//     micAsrFinalText.value = ''
+
+//     micStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+//     micAudioContext = new (window.AudioContext || window.webkitAudioContext)()
+//     const micSource = micAudioContext.createMediaStreamSource(micStream)
+
+//     // const url = getWebSocketUrl()
+//     // micWebSocket = new WebSocket(url)
+
+//     micWebSocket = new WebSocket('wss://www.funasr.com:10096/')
+
+//     micWebSocket.binaryType = 'arraybuffer'
+
+//     micWebSocket.onopen = () => {
+//       micWebSocket.send(JSON.stringify({
+//         chunk_size: [5, 10, 5],
+//         wav_name: 'mic',
+//         is_speaking: true,
+//         chunk_interval: 10,
+//         mode: '2pass'
+//       }))
+//     }
+
+//     micWebSocket.onmessage = (event) => {
+//       try {
+//         const result = JSON.parse(event.data)
+//         let text = result.text || result.result
+//         const model = result.mode
+
+//         if (model === '2pass-offline' || model === 'offline') {
+//           text = removeLeadingPunctuation(text)
+//           micAsrFinalText.value +=  text + '\n'
+//           // micAsrText.value = micAsrFinalText.value
+//           micAsrText.value = ''
+//           chat.value.chatHistory.push({ role: 'assistant', content: text })
+//           info.value.push({
+//             type: "rightinfo",
+//             content: text,
+//             time: getCurrentTime()
+//           })
+//         } else {
+//           micAsrText.value += text
+//         }
+//       } catch (e) {
+//         console.log('mic 原始数据:', event.data)
+//       }
+//     }
+
+//     micProcessor = micAudioContext.createScriptProcessor(4096, 1, 1)
+//     micProcessor.onaudioprocess = (e) => {
+//       const inputData = e.inputBuffer.getChannelData(0)
+//       const downsampled = downsampleBuffer(inputData, 48000, 16000)
+//       const pcm = new Int16Array(downsampled.length)
+
+//       for (let i = 0; i < downsampled.length; i++) {
+//         const s = Math.max(-1, Math.min(1, downsampled[i]))
+//         pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+//       }
+
+//       micSampleBuf = Int16Array.from([...micSampleBuf, ...pcm])
+//       while (micSampleBuf.length >= CHUNK_SIZE) {
+//         const chunk = micSampleBuf.slice(0, CHUNK_SIZE)
+//         micSampleBuf = micSampleBuf.slice(CHUNK_SIZE)
+//         if (micWebSocket.readyState === WebSocket.OPEN) {
+//           micWebSocket.send(chunk.buffer)
+//         }
+//       }
+//     }
+
+//     micSource.connect(micProcessor)
+//     micProcessor.connect(micAudioContext.destination)
+//     micActive.value = true
+//   } catch (err) {
+//     console.log( err)
+//     alert('无法启动麦克风识别，请检查麦克风权限')
+//     micActive.value = false
+//   }
+// }
+
+
+// const startMicASR = async () => { // 原免费的asr
 //   try {
 //     micAsrText.value = ''
 //     micAsrFinalText.value = ''
@@ -469,6 +660,7 @@ const startMicASR = async () => {
 //   }
 // }
 
+
 const stopMicASR = () => {
   if (micWebSocket?.readyState === WebSocket.OPEN) {
     micWebSocket.send(JSON.stringify({ is_speaking: false }))
@@ -479,6 +671,7 @@ const stopMicASR = () => {
   micStream?.getTracks().forEach(t => t.stop())
   micSampleBuf = new Int16Array()
   micActive.value = false
+  window.sessionStorage.setItem('micActive',false)
 }
 
 let sysWebSocket: WebSocket
@@ -496,50 +689,74 @@ const startSysASR = async () => {
     sysAudioContext = new (window.AudioContext || window.webkitAudioContext)()
     const sysSource = sysAudioContext.createMediaStreamSource(sysStream)
 
-    sysWebSocket = new WebSocket('wss://www.funasr.com:10096/')
+    // const url = 'ws://localhost:3001';
+    const url = 'wss://7f8c-2001-da8-e800-a3d8-35e6-ca73-10f8-d787.ngrok-free.app/asr'
+    sysWebSocket = new WebSocket(url);
     sysWebSocket.binaryType = 'arraybuffer'
 
     sysWebSocket.onopen = () => {
+      console.log("✅ 前端与后端连接建立");
       sysWebSocket.send(JSON.stringify({
-        chunk_size: [5, 10, 5],
-        wav_name: 'sys',
-        is_speaking: true,
-        chunk_interval: 10,
-        mode: '2pass'
-      }))
+        type: 'start-asr'
+      }));
     }
+    sysWebSocket.onerror = (e) => {
+      console.error("❌ WebSocket 错误", e);
+      alert('无法启动系统声音识别');
+      sysActive.value = false;
+      window.sessionStorage.setItem('sysActive',false)
+    };
 
     sysWebSocket.onmessage = (event) => {
-      try {
-        const result = JSON.parse(event.data)
-        let text = result.text || result.result
-        const model = result.mode
-
-        if (model === '2pass-offline' || model === 'offline') {
+      console.log('sys 原始数据:', event.data)
+      const data = JSON.parse(event.data);
+      const jsonData = JSON.parse(event.data);
+      console.log('sys 原始数据:', jsonData.data.endTime)
+      if (jsonData.data.endTime === null) {
+          sysAsrText.value = jsonData.data.text; // 实时中间结果
+      } else if (jsonData.data.endTime !== null) {
+          let text = jsonData.data.text;; // 最终识别结果
           text = removeLeadingPunctuation(text)
           sysAsrFinalText.value += text + '\n'
-          // sysAsrText.value = sysAsrFinalText.value
-          sysAsrText.value = ''
-          
+          sysAsrText.value = ' '
           chat.value.chatHistory.push({
             role: 'user',
             content: text
           })
           // chat.value.query = text
           getRAGResult(chat.value)
-          // toggleExpand(1)
-          
           info.value.push({
             type: "leftinfo",
             content: text,
             time: getCurrentTime()
           })
-        } else {
-          sysAsrText.value += text
-        }
-      } catch (e) {
-        console.log('sys 原始数据:', event.data)
+      } else if (jsonData.status === 'error') {
+        sysActive.value = false;
+        window.sessionStorage.setItem('sysActive',false)
+        console.error('识别错误:', jsonData.message);
       }
+      // if (jsonData.type === 'asr-interim-result') {
+      //     sysAsrText.value = jsonData.result
+      // } else if (jsonData.type === 'asr-final-result') {
+      //     let text = jsonData.result; // 最终识别结果
+      //     text = removeLeadingPunctuation(text)
+      //     sysAsrFinalText.value += text + '\n'
+      //     sysAsrText.value = ''
+      //     chat.value.chatHistory.push({
+      //       role: 'user',
+      //       content: text
+      //     })
+      //     // chat.value.query = text
+      //     getRAGResult(chat.value)
+      //     info.value.push({
+      //       type: "leftinfo",
+      //       content: text,
+      //       time: getCurrentTime()
+      //     })
+      // } else if (jsonData.type === 'error') {
+      //   sysActive.value = false;
+      //   console.error('识别错误:', jsonData.message);
+      // }
     }
 
     sysProcessor = sysAudioContext.createScriptProcessor(4096, 1, 1)
@@ -566,13 +783,101 @@ const startSysASR = async () => {
     sysSource.connect(sysProcessor)
     sysProcessor.connect(sysAudioContext.destination)
     sysActive.value = true
+    window.sessionStorage.setItem('sysActive',true)
   } catch (err) {
     // alert('⚠️ 当前浏览器或系统可能不支持系统音频，请选择标签页并勾选共享音频')
     sysActive.value = false
+    window.sessionStorage.setItem('sysActive',false)
   }
 }
 
-// const startSysASR = async () => {
+// const startSysASR = async () => { // 原科大讯飞免费的asr
+//   try {
+//     sysAsrText.value = ''
+//     sysAsrFinalText.value = ''
+//     // alert('请选择【浏览器标签页】，并勾选“共享标签页音频”')
+
+//     sysStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
+//     sysAudioContext = new (window.AudioContext || window.webkitAudioContext)()
+//     const sysSource = sysAudioContext.createMediaStreamSource(sysStream)
+
+//     sysWebSocket = new WebSocket('wss://www.funasr.com:10096/')
+//     sysWebSocket.binaryType = 'arraybuffer'
+
+//     sysWebSocket.onopen = () => {
+//       sysWebSocket.send(JSON.stringify({
+//         chunk_size: [5, 10, 5],
+//         wav_name: 'sys',
+//         is_speaking: true,
+//         chunk_interval: 10,
+//         mode: '2pass'
+//       }))
+//     }
+
+//     sysWebSocket.onmessage = (event) => {
+//       try {
+//         const result = JSON.parse(event.data)
+//         let text = result.text || result.result
+//         const model = result.mode
+
+//         if (model === '2pass-offline' || model === 'offline') {
+//           text = removeLeadingPunctuation(text)
+//           sysAsrFinalText.value += text + '\n'
+//           // sysAsrText.value = sysAsrFinalText.value
+//           sysAsrText.value = ''
+
+//           chat.value.chatHistory.push({
+//             role: 'user',
+//             content: text
+//           })
+//           // chat.value.query = text
+//           getRAGResult(chat.value)
+//           // toggleExpand(1)
+          
+//           info.value.push({
+//             type: "leftinfo",
+//             content: text,
+//             time: getCurrentTime()
+//           })
+//         } else {
+//           sysAsrText.value += text
+//         }
+//       } catch (e) {
+//         console.log('sys 原始数据:', event.data)
+//       }
+//     }
+
+//     sysProcessor = sysAudioContext.createScriptProcessor(4096, 1, 1)
+//     sysProcessor.onaudioprocess = (e) => {
+//       const inputData = e.inputBuffer.getChannelData(0)
+//       const downsampled = downsampleBuffer(inputData, 48000, 16000)
+//       const pcm = new Int16Array(downsampled.length)
+
+//       for (let i = 0; i < downsampled.length; i++) {
+//         const s = Math.max(-1, Math.min(1, downsampled[i]))
+//         pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+//       }
+
+//       sysSampleBuf = Int16Array.from([...sysSampleBuf, ...pcm])
+//       while (sysSampleBuf.length >= CHUNK_SIZE) {
+//         const chunk = sysSampleBuf.slice(0, CHUNK_SIZE)
+//         sysSampleBuf = sysSampleBuf.slice(CHUNK_SIZE)
+//         if (sysWebSocket.readyState === WebSocket.OPEN) {
+//           sysWebSocket.send(chunk.buffer)
+//         }
+//       }
+//     }
+
+//     sysSource.connect(sysProcessor)
+//     sysProcessor.connect(sysAudioContext.destination)
+//     sysActive.value = true
+//   } catch (err) {
+//     // alert('⚠️ 当前浏览器或系统可能不支持系统音频，请选择标签页并勾选共享音频')
+//     sysActive.value = false
+//   }
+// }
+
+// const startSysASR = async () => { // 原免费的asr
 //   try {
 //     sysAsrText.value = ''
 //     sysAsrFinalText.value = ''
@@ -683,6 +988,7 @@ const stopSysASR = () => {
   sysStream?.getTracks().forEach(t => t.stop())
   sysSampleBuf = new Int16Array()
   sysActive.value = false
+  window.sessionStorage.setItem('sysActive',false)
 }
 
 const toggleMicASR = () => {
@@ -727,12 +1033,16 @@ function removeLeadingPunctuation(text: string): string {
 
 // 生命周期钩子
 onMounted(() => {
-  // text.value = 'Hello World'
-  // removeLeadingPunctuation(text.value)
-  // console.log('text:', text.value)
-// getQa()
-// toggleExpand(1)
-// getRAGResult(chat.value)
+  // getQa()
+  // toggleExpand(1)
+  // getRAGResult(chat.value)
+  window.sessionStorage.setItem('sysActive',false)
+  window.sessionStorage.setItem('micActive',false)
+  const chatId = window.sessionStorage.getItem('chatId')
+  if(chatId){
+    console.log('chatId:', chatId)
+    getChatIDList(chatId)
+  }
 })
 
 onBeforeUnmount(() => {
@@ -784,6 +1094,10 @@ function getCurrentTime() {
   return `${hours}:${minutes}`;
 }
 
+onBeforeUnmount(() => {
+  console.log('beforeunload')
+  saveChat(chat.value)
+})
 
 // 输入框内容
 const customerText = ref('')
@@ -816,6 +1130,7 @@ const clickRobot = (text, id) => {
   customerText.value = text
   sentMsg()
 }
+
 </script>
 
 
@@ -837,6 +1152,7 @@ font-size: 14px;
 max-width: 90vw;
 word-wrap: break-word;
 white-space: pre-line;  /* 保留换行符 */
+min-height: 20px; /* ✅ 设置一个你希望的最小宽度 */
 }
 .mic-button {
 font-size: 20px;
@@ -925,6 +1241,14 @@ margin-bottom: 10px;
 background: white;
 border: 1px solid #eee;
 }
+.recommend-text {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .footer {
 display: flex;
 align-items: center;

@@ -6,7 +6,7 @@
                 <el-button type="primary">Q</el-button>
                 <div style="margin-left: 10px;">智能提示系统</div>
             </div>
-            <el-menu mode="horizontal" class="nav" :default-active="activeMenu" @select="handleMenuSelect">
+            <el-menu mode="horizontal" class="nav" :default-active="activeMenu" @select="handleMenuSelect" ref="menuRef">
                 <el-menu-item index="card">提示卡片</el-menu-item>
                 <el-menu-item index="knowledge">知识管理</el-menu-item>
                 <el-menu-item index="doc">文档管理</el-menu-item>
@@ -24,10 +24,10 @@
 </template>
 
 <script>
-import { ref } from 'vue'
+import { ref, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
-// import { Search, Check, Heart, ChatDotRound, Clock, Microphone, MagicStick } from '@element-plus/icons-vue'
 import { Search } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
 export default {
   components: {
     Search
@@ -35,15 +35,32 @@ export default {
   setup() {
     const router = useRouter()
     const activeMenu = ref('card')
-
+    const menuRef = ref(null)
+    
     const handleMenuSelect = (key) => {
+      let micActive = window.sessionStorage.getItem('micActive')
+      let sysActive = window.sessionStorage.getItem('sysActive')
+      if(key === 'knowledge' || key === 'doc') {
+        if(micActive === 'true') {
+          ElMessage.warning('请先关闭语音识别')
+          menuRef.value?.updateActiveIndex(activeMenu.value)
+          return 
+        }
+        else if(sysActive === 'true') {
+          ElMessage.warning('请先关闭系统语音识别')
+          menuRef.value?.updateActiveIndex(activeMenu.value)
+          return 
+        }
+      }
       activeMenu.value = key
+      console.log(activeMenu.value)
       router.push(`/${key}`)
     }
 
     return {
       activeMenu,
-      handleMenuSelect
+      handleMenuSelect,
+      menuRef 
     }
   }
 }

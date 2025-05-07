@@ -1055,7 +1055,7 @@ const getChatIDList = async (id) => {
         info.value.push({
           type: infoType,
           content: resultText,
-          time: getCurrentTime() // 假设 getCurrentTime() 返回当前时间
+          time: getCurrentTime()
         })
       })
 
