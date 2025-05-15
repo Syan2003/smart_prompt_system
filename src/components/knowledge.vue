@@ -264,7 +264,7 @@ export default {
         async getQa(){
             const {data: res} = await this.$axios.get('/air/knowledge/list')
             if(res.code !== 200) return  this.$message.error(res.msg)
-            this.$message.success(res.msg)
+            // this.$message.success(res.msg)
             this.tableData = res.rows
             console.log(this.tableData)
         },
@@ -288,7 +288,7 @@ export default {
           this.$axios.delete(`/air/knowledge/${id}`)
             .then(res => {
               if (res.data.code !== 200) {
-                this.$message.error(res.data.msg)
+                // this.$message.error(res.data.msg)
                 return
               }
               // 删除成功，从 tableData 中移除
@@ -296,7 +296,7 @@ export default {
               if (index !== -1) {
                 this.tableData.splice(index, 1)
               }
-              this.$message.success('删除成功')
+              // this.$message.success('删除成功')
             })
             .catch(error => {
               console.error('删除失败:', error)
@@ -325,7 +325,7 @@ export default {
                 return
               }
 
-              this.$message.success('修改成功')
+              // this.$message.success('修改成功')
 
               const index = this.tableData.findIndex(item => item.id === id)
               if (index !== -1) {
@@ -349,7 +349,7 @@ export default {
           this.$axios.put(`/air/knowledge/updateQa/${row.id}`, updatedRow)
             .then(res => {
               if (res.data.code !== 200) {
-                this.$message.error(res.data.msg)
+                // this.$message.error(res.data.msg)
                 return
               }
 
@@ -396,7 +396,7 @@ export default {
                     return
                   }
                   this.getQa()
-                  this.$message.success('新建成功')
+                  // this.$message.success('新建成功')
                   this.tableData.unshift({
                     ...this.createForm,
                     id: res.data.data?.id || Date.now()  // 假如后端返回新ID

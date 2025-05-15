@@ -30,6 +30,19 @@
                 {{ item.confidence === 'confirmed' ? '已验证' : 'AI生成' }}
               </span>
             </div>
+            <div class="card-footer">
+              <div class="audio-player" @click="handleAudio(item.id, item.answer)">
+                <!-- <span class="play-icon">{{ isPlaying[item.id] ? '❚❚' : '▶' }}</span> -->
+                <span class="play-icon">
+                  <template v-if="isLoading[item.id]">⏳</template>
+                  <template v-else-if="isPlaying[item.id]">❚❚</template>
+                  <template v-else>▶</template>
+                </span>
+                <span class="time-display" style="margin-left: 5px;">
+                  {{ formatTime(currentTime[item.id] || 0) }} / {{ formatTime(totalTime[item.id] || 0) }}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -53,8 +66,50 @@
   <div class="asr-container">
       <div class="asr-text">{{ micAsrText  || '🎤 请打开麦克风语音...' }}</div>
       <div class="asr-text">{{ sysAsrText  || '🎤 请打开系统音频语音...' }}</div>
+      <div style="display: flex; gap: 12px; align-items: center;">
+        <!-- 麦克风设备选择 -->
+        <el-select v-model="micDeviceId" placeholder="选择麦克风" style="width: 180px">
+          <el-option
+            v-for="device in micDevices"
+            :key="device.deviceId"
+            :label="device.label || '麦克风设备'"
+            :value="device.deviceId"
+          />
+        </el-select>
 
-      <el-button 
+        <!-- 麦克风录音按钮 -->
+        <el-button 
+          type="primary" 
+          round 
+          @click="toggleMicASR"
+        >
+          <div v-if="micActive === true"><el-icon><Microphone /></el-icon></div>
+          <div v-else><el-icon><Mute /></el-icon></div>
+          麦克风声音
+        </el-button>
+
+        <!-- 系统声音录制按钮 -->
+        <el-button 
+          type="success" 
+          round 
+          @click="toggleSysASR"
+        >
+          <div v-if="sysActive === true"><font-awesome-icon icon="fas fa-volume-up" /></div>
+          <div v-else><font-awesome-icon icon="fas fa-volume-mute" /></div>
+          系统声音
+        </el-button>
+
+        <!-- 系统音频设备选择 -->
+        <el-select v-model="sysDeviceId" placeholder="选择系统输入" style="width: 180px">
+          <el-option
+            v-for="device in sysDevices"
+            :key="device.deviceId"
+            :label="device.label || '系统设备'"
+            :value="device.deviceId"
+          />
+        </el-select>
+      </div>
+      <!-- <el-button 
           type="primary" 
           round 
           @click="toggleMicASR"
@@ -68,10 +123,10 @@
           round 
           @click="toggleSysASR"
       >
-          <div v-if="sysActive === true"><el-icon><Microphone /></el-icon></div>
-          <div v-else><el-icon><Mute /></el-icon></div>
+          <div v-if="sysActive === true"><font-awesome-icon icon="fas fa-volume-up" /></div>
+          <div v-else><font-awesome-icon icon="fas fa-volume-mute" /></div>
           系统声音
-      </el-button>
+      </el-button> -->
   </div>
   <!-- 聊天悬浮框 -->
   <div class="chat-float-window" v-show="chatVisible">
@@ -104,7 +159,7 @@
               </div>
             </div>
               <!-- 实时识别展示 -->
-            <!-- <div class="info_l" v-if="micActive && micAsrText">
+            <!-- <div class="info_l" v-if="micActive && micAsrText && micAsrText !== ' ' ">
               <div class="con_r con_text">
                 <span class="con_l">{{ micAsrText }}</span>
                 <span class="circle circle_l">
@@ -113,7 +168,7 @@
               </div>
               <div class="time_l">{{ getCurrentTime() }}</div>
             </div>
-            <div class="info_r info_default" v-if="sysActive && sysAsrText">
+            <div class="info_r info_default" v-if="sysActive && sysAsrText && sysAsrText !== ' ' ">
               <img src="../../../public/people.png" alt="" class="circle circle_r" />
               <div class="con_r con_text">
                 <div>{{sysAsrText}}</div>
@@ -138,7 +193,6 @@
       </div>
     </div>
   </div>
-
 
   <!-- 浮动按钮，控制展开收起 -->
   <el-button 
@@ -173,7 +227,21 @@ import { text } from '@fortawesome/fontawesome-svg-core'
 const asrText = ref('')
 const asrFinalText = ref('')
 const asrActive = ref(false)
-const cards = ref<any[]>([])
+// const cards = ref<any[]>([])
+const cards = ref([
+  // {
+  //   id: 1,
+  //   question: '厦门大学的课程类型有哪些？',
+  //   answer: '厦门大学的课程类型包括必修课、选修课、实践课等。',
+  //   confidence: 'confirmed'
+  // },
+  // {
+  //   id: 2,
+  //   question: '厦门大学的学费是多少？',
+  //   answer: '厦门大学的学费根据专业和年级不同而有所差异，一般在5000-20000元之间。',
+  //   confidence: 'ai-generated'
+  // }
+])
 const recommend_cards = ref<any[]>([])
 const expandedIds = ref<number[]>([])
 
@@ -235,7 +303,8 @@ const downsampleBuffer = (
 
 const getRAGResult = async (chatParam: any) => {
   try {
-    const chatId = window.sessionStorage.getItem('chatId')
+    // const chatId = window.sessionStorage.getItem('chatId')
+    const chatId = '80'
     console.log("chatParam:", chatParam)
     if(chatId){
       chatParam.id = chatId
@@ -246,6 +315,7 @@ const getRAGResult = async (chatParam: any) => {
     const maxId = Math.max(...cards.value.map(item => item.id), 0); // 获取当前cards数组中的最大ID
     const newItems = results.map((item: any, index: number) => ({
       ...item,
+      idx: item.id,
       id: maxId + index + 1 // 生成新的id
     }));
     cards.value.unshift(...newItems);
@@ -253,6 +323,7 @@ const getRAGResult = async (chatParam: any) => {
       toggleExpand(newItems[0].id);
       recommend_cards.value = results.map((item: any, index: number) => ({
         ...item,
+        idx: item.id,
         id: index + 1 
       }))
     }
@@ -285,7 +356,8 @@ const getRAGResult = async (chatParam: any) => {
 
 const saveChat = async (chatParam: any) => {
   try {
-    const chatId = window.sessionStorage.getItem('chatId')
+    // const chatId = window.sessionStorage.getItem('chatId')
+    const chatId = '80'
     console.log("chatParam:", chatParam)
     if(chatId){
       chatParam.id = chatId
@@ -329,6 +401,7 @@ const getChatIDList = async (id) => {
       // console.log('对话记录:', chatData.reply[0].data)
       cards.value = chatData.reply[0].data.map((item, index) => ({
         ...item,
+        idx: item.id,
         id: index + 1 
       }))
       recommend_cards.value = cards.value
@@ -355,13 +428,22 @@ import md5 from 'crypto-js/md5'
 const APPID = '7bbacce7'
 const API_KEY = 'e7558fed3b8b89fb8d3f8c71951bbe88'
 
-function getWebSocketUrl() {
-  const url = 'wss://rtasr.xfyun.cn/v1/ws'
-  const ts = Math.floor(Date.now() / 1000)
-  const signa = md5(APPID + ts).toString()
-  const signatureSha = CryptoJS.HmacSHA1(signa, API_KEY)
-  const signature = encodeURIComponent(CryptoJS.enc.Base64.stringify(signatureSha))
-  return `${url}?appid=${APPID}&ts=${ts}&signa=${signature}`
+// function getWebSocketUrl() {
+//   const url = 'wss://rtasr.xfyun.cn/v1/ws'
+//   const ts = Math.floor(Date.now() / 1000)
+//   const signa = md5(APPID + ts).toString()
+//   const signatureSha = CryptoJS.HmacSHA1(signa, API_KEY)
+//   const signature = encodeURIComponent(CryptoJS.enc.Base64.stringify(signatureSha))
+//   return `${url}?appid=${APPID}&ts=${ts}&signa=${signature}`
+// }
+function getWebSocketUrl(path) {
+  const baseURL = axios.defaults.baseURL;
+  if (!baseURL) {
+    throw new Error('axios.defaults.baseURL 未设置');
+  }
+  const wsProtocol = baseURL.startsWith('https') ? 'wss' : 'ws';
+  const base = baseURL.replace(/^https?:\/\//, '').replace(/\/$/, '');
+  return `${wsProtocol}://${base}${path}`;
 }
 
 const startMicASR = async () => {
@@ -369,13 +451,25 @@ const startMicASR = async () => {
     micAsrText.value = '';
     micAsrFinalText.value = '';
 
-    micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    // console.log('micDeviceId.value:', micDeviceId.value)
+    if (!micDeviceId.value) {
+      alert('请先选择麦克风设备');
+      return;
+    }
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: micDeviceId.value ? { exact: micDeviceId.value } : undefined
+      }
+    });
+
     micAudioContext = new (window.AudioContext || window.webkitAudioContext)();
     const micSource = micAudioContext.createMediaStreamSource(micStream);
 
-    // const url = 'ws://localhost:3001'; // 改为你本地后端地址
     // const url = 'http://localhost:8080'
-    const url = 'wss://7f8c-2001-da8-e800-a3d8-35e6-ca73-10f8-d787.ngrok-free.app/asr'
+    // const url = 'wss://7f8c-2001-da8-e800-a3d8-35e6-ca73-10f8-d787.ngrok-free.app/asr'
+    const url = getWebSocketUrl('/asr')
+    console.log('WebSocket URL:', url);
     micWebSocket = new WebSocket(url);
     micWebSocket.binaryType = 'arraybuffer';
 
@@ -685,12 +779,23 @@ const startSysASR = async () => {
     sysAsrFinalText.value = ''
     // alert('请选择【浏览器标签页】，并勾选“共享标签页音频”')
 
-    sysStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
+    // sysStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
+    if (!sysDeviceId.value) {
+      alert('请先选择系统设备');
+      return;
+    }
+    sysStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        deviceId: sysDeviceId.value ? { exact: sysDeviceId.value } : undefined
+      }
+    });
+
     sysAudioContext = new (window.AudioContext || window.webkitAudioContext)()
     const sysSource = sysAudioContext.createMediaStreamSource(sysStream)
 
-    // const url = 'ws://localhost:3001';
-    const url = 'wss://7f8c-2001-da8-e800-a3d8-35e6-ca73-10f8-d787.ngrok-free.app/asr'
+    // const url = 'wss://7f8c-2001-da8-e800-a3d8-35e6-ca73-10f8-d787.ngrok-free.app/asr'
+    // const url = 'ws://10.32.39.42:8081/asr'
+    const url = getWebSocketUrl('/asr')
     sysWebSocket = new WebSocket(url);
     sysWebSocket.binaryType = 'arraybuffer'
 
@@ -708,10 +813,10 @@ const startSysASR = async () => {
     };
 
     sysWebSocket.onmessage = (event) => {
-      console.log('sys 原始数据:', event.data)
+      // console.log('sys 原始数据:', event.data)
       const data = JSON.parse(event.data);
       const jsonData = JSON.parse(event.data);
-      console.log('sys 原始数据:', jsonData.data.endTime)
+      // console.log('sys 原始数据:', jsonData.data.endTime)
       if (jsonData.data.endTime === null) {
           sysAsrText.value = jsonData.data.text; // 实时中间结果
       } else if (jsonData.data.endTime !== null) {
@@ -1030,15 +1135,50 @@ function removeLeadingPunctuation(text: string): string {
   return text;
 }
 
+const micDevices = ref([])
+const sysDevices = ref([])
+
+const micDeviceId = ref('')
+const sysDeviceId = ref('')
+
+// const getAudioInputDevices = async () => {
+//   const devices = await navigator.mediaDevices.enumerateDevices();
+//   const audioInputs = devices.filter(d => d.kind === 'audioinput');
+//   micDevices.value = audioInputs;
+//   sysDevices.value = audioInputs;
+//   return audioInputs
+// };
+
+const getAudioInputDevices = async () => {
+  try {
+    // 请求权限：必须有这一步
+    await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const audioInputs = devices.filter(d => d.kind === 'audioinput');
+
+    micDevices.value = audioInputs;
+    sysDevices.value = audioInputs;
+
+    return audioInputs;
+  } catch (err) {
+    console.error('获取麦克风权限失败:', err);
+    return [];
+  }
+};
+
 
 // 生命周期钩子
 onMounted(() => {
   // getQa()
   // toggleExpand(1)
   // getRAGResult(chat.value)
+  let temp = getAudioInputDevices()
+  console.log(temp)
   window.sessionStorage.setItem('sysActive',false)
   window.sessionStorage.setItem('micActive',false)
-  const chatId = window.sessionStorage.getItem('chatId')
+  // const chatId = window.sessionStorage.getItem('chatId')
+  const chatId = '80'
   if(chatId){
     console.log('chatId:', chatId)
     getChatIDList(chatId)
@@ -1131,6 +1271,102 @@ const clickRobot = (text, id) => {
   sentMsg()
 }
 
+const isPlaying = ref({});
+const currentTime = ref({});
+const totalTime = ref({});
+const audioMap = ref({});  // 每条音频的 Audio 实例
+const audioUrlMap = ref({});  // 每条记录的音频 URL
+const isLoading = ref({}) // 每个音频项的 loading 状态
+
+let timerMap = {};  // 每条记录独立定时器
+
+const handleAudio = async (id, answer) => {
+  // id = parseInt(cards.value[id].idx)
+  // console.log(cards.value)
+  console.log('handleAudio', id, answer)
+  if (!audioUrlMap.value[id]) {
+    // 设置加载中
+    isLoading.value[id] = true;
+
+    try {
+      const formData = new FormData();
+      formData.append('QaId', parseInt(cards.value[id-1].idx));
+      formData.append('answer', answer);
+      
+      // console.log(parseInt(cards.value[id].idx))
+
+      const res = await axios.post('/air/copyVocie/tts', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      let data = res.data;
+      console.log('生成音频数据：', data);
+
+      if (data.code === 200) {
+        const audioUrl = axios.defaults.baseURL + data.data.audioUrl;
+        audioUrlMap.value[id] = audioUrl;
+
+        const audio = new Audio(audioUrl);
+        audioMap.value[id] = audio;
+
+        audio.addEventListener('loadedmetadata', () => {
+          totalTime.value[id] = Math.floor(audio.duration);
+          // 取消加载中
+          isLoading.value[id] = false;
+          playAudio(id);
+        });
+      } else {
+        isLoading.value[id] = false;
+        alert(data.msg || '音频生成失败');
+      }
+    } catch (err) {
+      console.error('生成音频失败：', err);
+      isLoading.value[id] = false;
+    }
+  } else {
+    if (!isPlaying.value[id]) {
+      playAudio(id);
+    } else {
+      pauseAudio(id);
+    }
+  }
+}
+
+const playAudio = (id) => {
+  const audio = audioMap.value[id];
+  if (!audio) return;
+
+  audio.play();
+  isPlaying.value[id] = true;
+
+  timerMap[id] = setInterval(() => {
+    currentTime.value[id] = Math.floor(audio.currentTime);
+  }, 1000);
+
+  audio.onended = () => {
+    clearInterval(timerMap[id]);
+    isPlaying.value[id] = false;
+    currentTime.value[id] = 0;
+  };
+};
+
+const pauseAudio = (id) => {
+  const audio = audioMap.value[id];
+  if (!audio) return;
+
+  audio.pause();
+  isPlaying.value[id] = false;
+  clearInterval(timerMap[id]);
+};
+
+const formatTime = (seconds) => {
+  const minutes = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+};
+
 </script>
 
 
@@ -1214,12 +1450,12 @@ font-size: 16px;
 font-weight: bold;
 margin-bottom: 10px;
 }
-.card-footer {
+/* .card-footer {
 display: flex;
 gap: 10px;
 align-items: center;
 margin-top: 10px;
-}
+} */
 .badge {
 position: absolute;
 top: 10px;
@@ -1257,10 +1493,18 @@ padding-top: 20px;
 font-size: 14px;
 color: #666;
 }
+.card-footer {
+  position: absolute;
+  right: 20px;
+  bottom: 15px;
+  font-size: 14px;
+  color: #999;
+}
+
 .card-list {
-display: flex;
-flex-direction: column;
-gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
 .card-title {

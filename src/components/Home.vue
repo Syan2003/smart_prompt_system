@@ -5,12 +5,13 @@
                 <!-- <el-icon><Search /></el-icon> -->
                 <el-button type="primary">Q</el-button>
                 <div style="margin-left: 10px;">智能提示系统</div>
+                <!-- <font-awesome-icon icon="fas fa-language" /> -->
             </div>
             <el-menu mode="horizontal" class="nav" :default-active="activeMenu" @select="handleMenuSelect" ref="menuRef">
                 <el-menu-item index="card">提示卡片</el-menu-item>
                 <el-menu-item index="knowledge">知识管理</el-menu-item>
                 <el-menu-item index="doc">文档管理</el-menu-item>
-                <!-- <el-menu-item index="setting">系统设置</el-menu-item> -->
+                <el-menu-item index="setting">系统设置</el-menu-item>
             </el-menu>
             <div class="user">
                 <el-avatar :size="30" icon="el-icon-user-solid" />
@@ -88,7 +89,8 @@ export default {
   .nav {
     display: flex;
     gap: 30px;
-    width: 400px;
+    width: 30%;
+    /* width: 500px; */
   }
   .nav-item {
     cursor: pointer;
