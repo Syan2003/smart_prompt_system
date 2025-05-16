@@ -64,6 +64,7 @@
       </el-col>
   </el-row>
   <div class="asr-container">
+      <div v-if="ok_AI_Broadcast === true">🎤 AI播报中...</div>
       <div class="asr-text">{{ micAsrText  || '🎤 请打开麦克风语音...' }}</div>
       <div class="asr-text">{{ sysAsrText  || '🎤 请打开系统音频语音...' }}</div>
       <div style="display: flex; gap: 12px; align-items: center;">
@@ -74,11 +75,42 @@
             :key="device.deviceId"
             :label="device.label || '麦克风设备'"
             :value="device.deviceId"
+            :disabled="micActive === true"
           />
         </el-select>
-
-        <!-- 麦克风录音按钮 -->
         <el-button 
+          type="primary" 
+          round 
+          @click="toggleMicASR"
+          :disabled="isConnectingMic"
+        >
+          <template v-if="isConnectingMic">
+            <el-icon class="is-loading"><Loading /></el-icon>
+          </template>
+          <template v-else>
+            <div v-if="micActive === true"><el-icon><Microphone /></el-icon></div>
+            <div v-else><el-icon><Mute /></el-icon></div>
+          </template>
+          麦克风声音
+        </el-button>
+
+        <el-button 
+          type="success" 
+          round 
+          @click="toggleSysASR"
+          :disabled="isConnectingSys"
+        >
+          <template v-if="isConnectingSys">
+            <el-icon class="is-loading"><Loading /></el-icon>
+          </template>
+          <template v-else>
+            <div v-if="sysActive === true"><font-awesome-icon icon="fas fa-volume-up" /></div>
+            <div v-else><font-awesome-icon icon="fas fa-volume-mute" /></div>
+          </template>
+          系统声音
+        </el-button>
+
+        <!-- <el-button 
           type="primary" 
           round 
           @click="toggleMicASR"
@@ -87,8 +119,6 @@
           <div v-else><el-icon><Mute /></el-icon></div>
           麦克风声音
         </el-button>
-
-        <!-- 系统声音录制按钮 -->
         <el-button 
           type="success" 
           round 
@@ -97,7 +127,7 @@
           <div v-if="sysActive === true"><font-awesome-icon icon="fas fa-volume-up" /></div>
           <div v-else><font-awesome-icon icon="fas fa-volume-mute" /></div>
           系统声音
-        </el-button>
+        </el-button> -->
 
         <!-- 系统音频设备选择 -->
         <el-select v-model="sysDeviceId" placeholder="选择系统输入" style="width: 180px">
@@ -106,6 +136,7 @@
             :key="device.deviceId"
             :label="device.label || '系统设备'"
             :value="device.deviceId"
+            :disabled="sysActive === true"
           />
         </el-select>
       </div>
@@ -219,7 +250,8 @@ import {
   Microphone,
   Mute,
   ArrowDown,
-  ArrowUp
+  ArrowUp,
+  Loading
 } from '@element-plus/icons-vue'
 import { text } from '@fortawesome/fontawesome-svg-core'
 
@@ -452,8 +484,8 @@ const startMicASR = async () => {
     micAsrFinalText.value = '';
 
     // micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    // console.log('micDeviceId.value:', micDeviceId.value)
     if (!micDeviceId.value) {
+      isConnectingMic.value = false;
       alert('请先选择麦克风设备');
       return;
     }
@@ -475,12 +507,14 @@ const startMicASR = async () => {
 
     // 连接建立后，通知后端启动识别任务
     micWebSocket.onopen = () => {
+      isConnectingMic.value = false;
       console.log("✅ 前端与后端连接建立");
       micWebSocket.send(JSON.stringify({
         type: 'start-asr'
       }));
     };
     micWebSocket.onerror = (e) => {
+      isConnectingMic.value = false;
       console.error("❌ WebSocket 错误", e);
       alert('无法启动麦克风识别，请检查麦克风权限');
       micActive.value = false;
@@ -509,6 +543,7 @@ const startMicASR = async () => {
           })
           // console.log('实时识别：', jsonData.data);
       } else if (jsonData.status === 'error') {
+        isConnectingMic.value = false;
         // console.error('识别错误:', jsonData.message);
         micActive.value = false;
         window.sessionStorage.setItem('micActive',false)
@@ -781,6 +816,7 @@ const startSysASR = async () => {
 
     // sysStream = await navigator.mediaDevices.getDisplayMedia({ audio: true })
     if (!sysDeviceId.value) {
+      isConnectingSys.value = false;
       alert('请先选择系统设备');
       return;
     }
@@ -800,12 +836,14 @@ const startSysASR = async () => {
     sysWebSocket.binaryType = 'arraybuffer'
 
     sysWebSocket.onopen = () => {
+      isConnectingSys.value = false;
       console.log("✅ 前端与后端连接建立");
       sysWebSocket.send(JSON.stringify({
         type: 'start-asr'
       }));
     }
     sysWebSocket.onerror = (e) => {
+      isConnectingSys.value = false;
       console.error("❌ WebSocket 错误", e);
       alert('无法启动系统声音识别');
       sysActive.value = false;
@@ -836,6 +874,7 @@ const startSysASR = async () => {
             time: getCurrentTime()
           })
       } else if (jsonData.status === 'error') {
+        isConnectingSys.value = false;
         sysActive.value = false;
         window.sessionStorage.setItem('sysActive',false)
         console.error('识别错误:', jsonData.message);
@@ -1095,11 +1134,15 @@ const stopSysASR = () => {
   sysActive.value = false
   window.sessionStorage.setItem('sysActive',false)
 }
+const isConnectingMic = ref(false); // 麦克风连接中状态
+const isConnectingSys = ref(false); // 系统声音连接中状态
 
 const toggleMicASR = () => {
+  if(!micActive.value) isConnectingMic.value = true;
   micActive.value ? stopMicASR() : startMicASR()
 }
 const toggleSysASR = () => {
+  if(!sysActive.value) isConnectingSys.value = true;
   sysActive.value ? stopSysASR() : startSysASR()
 }
 
@@ -1306,11 +1349,27 @@ const handleAudio = async (id, answer) => {
 
       if (data.code === 200) {
         const audioUrl = axios.defaults.baseURL + data.data.audioUrl;
+        
         audioUrlMap.value[id] = audioUrl;
-
-        const audio = new Audio(audioUrl);
+        // 方法一
+        // const audio = new Audio(audioUrl);
+        // audioMap.value[id] = audio;
+        // console.log('audioUrl', audioUrl);
+        // 方法二
+        const res = await axios.get(audioUrl, {
+          responseType: 'blob'
+        });
+        const blob = res.data;
+        const blobUrl = URL.createObjectURL(blob);
+        const audio = new Audio();
+        audio.src = blobUrl;
         audioMap.value[id] = audio;
-
+        // 方法三
+        // const audio = new Audio();
+        // audio.crossOrigin = "anonymous";
+        // audio.src = audioUrl;
+        // audioMap.value[id] = audio;
+        console.log('audioUrl', audioUrl);
         audio.addEventListener('loadedmetadata', () => {
           totalTime.value[id] = Math.floor(audio.duration);
           // 取消加载中
@@ -1334,12 +1393,194 @@ const handleAudio = async (id, answer) => {
   }
 }
 
-const playAudio = (id) => {
+
+// const playAudio = async (id) => {
+//   const audio = audioMap.value[id];
+//   if (!audio) return;
+
+//   audio.play();
+//   isPlaying.value[id] = true;
+
+//   timerMap[id] = setInterval(() => {
+//     currentTime.value[id] = Math.floor(audio.currentTime);
+//   }, 1000);
+
+//   audio.onended = () => {
+//     clearInterval(timerMap[id]);
+//     isPlaying.value[id] = false;
+//     currentTime.value[id] = 0;
+//   };
+// };
+const downsampleAndConvertPCM = (audioBuffer, targetRate = 16000) => {
+  const raw = audioBuffer.getChannelData(0); // 单声道
+  const sampleRate = audioBuffer.sampleRate;
+
+  const rateRatio = sampleRate / targetRate;
+  const newLength = Math.round(raw.length / rateRatio);
+  const downsampled = new Int16Array(newLength);
+
+  for (let i = 0; i < newLength; i++) {
+    const sample = raw[Math.floor(i * rateRatio)];
+    const s = Math.max(-1, Math.min(1, sample));
+    downsampled[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+  return downsampled;
+};
+
+const fetchAndSendAudioToASR = async (url) => {
+  // const response = await fetch(url);
+  const response = await fetch(url, { mode: 'cors' });
+  const arrayBuffer = await response.arrayBuffer();
+
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
+
+  const pcmData = downsampleAndConvertPCM(decodedData, 16000); // 16kHz 单声道
+
+  const CHUNK_SIZE = 3200; // 对应 100ms 的 16kHz PCM 数据
+  let offset = 0;
+
+  while (offset < pcmData.length) {
+    const chunk = pcmData.slice(offset, offset + CHUNK_SIZE);
+    offset += CHUNK_SIZE;
+
+    if (micWebSocket && micWebSocket.readyState === WebSocket.OPEN) {
+      micWebSocket.send(chunk.buffer); // 发送 chunk 给后端
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 100)); // 模拟实时流发送
+  }
+
+  // 发送结束标志（可选，根据后端协议决定）
+  // micWebSocket.send(JSON.stringify({ type: 'end-audio' }));
+};
+
+// const playAudio = async (id) => {
+//   if (!micWebSocket || micWebSocket.readyState !== WebSocket.OPEN) {
+//     alert("语音识别连接未就绪");
+//     return;
+//   }
+
+//   const audioUrl = audioUrlMap.value[id];
+//   if (!audioUrl) return;
+
+//   const audio = audioMap.value[id];
+//   if (!audio) return;
+
+//   isPlaying.value[id] = true;
+//   currentTime.value[id] = 0;
+
+//   // 开始播放音频
+//   audio.play();
+
+//   // 播放进度计时
+//   timerMap[id] = setInterval(() => {
+//     currentTime.value[id] = Math.floor(audio.currentTime);
+//   }, 1000);
+
+//   // 开始将音频内容发送至 ASR 服务
+//   // try {
+//   //   await fetchAndSendAudioToASR(audioUrl);
+//   // } catch (e) {
+//   //   console.error("发送音频至 ASR 失败:", e);
+//   // }
+
+//   audio.onended = () => {
+//     clearInterval(timerMap[id]);
+//     isPlaying.value[id] = false;
+//     currentTime.value[id] = 0;
+//   };
+// };
+
+// const pauseAudio = (id) => {
+//   const audio = audioMap.value[id];
+//   if (!audio) return;
+
+//   audio.pause();
+//   isPlaying.value[id] = false;
+//   clearInterval(timerMap[id]);
+// };
+
+// const playAudio = (id) => {
+//   const audio = audioMap.value[id];
+//   if (!audio) return;
+
+//   audio.play();
+//   isPlaying.value[id] = true;
+
+//   timerMap[id] = setInterval(() => {
+//     currentTime.value[id] = Math.floor(audio.currentTime);
+//   }, 1000);
+
+//   audio.onended = () => {
+//     clearInterval(timerMap[id]);
+//     isPlaying.value[id] = false;
+//     currentTime.value[id] = 0;
+//   };
+// };
+
+// const pauseAudio = (id) => {
+//   const audio = audioMap.value[id];
+//   if (!audio) return;
+
+//   audio.pause();
+//   isPlaying.value[id] = false;
+//   clearInterval(timerMap[id]);
+// };
+
+const processorMap = {};
+const sourceNodeMap = {};
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+let ok_AI_Broadcast = ref(false);
+
+const playAudio = async (id) => {
+  if (audioCtx && audioCtx.state === 'suspended') {
+    await audioCtx.resume();
+  }
   const audio = audioMap.value[id];
   if (!audio) return;
 
-  audio.play();
+  if (!micWebSocket || micWebSocket.readyState !== WebSocket.OPEN) {
+    alert("ASR 连接未就绪");
+    return;
+  }
+
+  ok_AI_Broadcast.value = true;
+
+  // 如果已有 sourceNode，复用；没有则创建
+  let sourceNode = sourceNodeMap[id];
+  if (!sourceNode) {
+    sourceNode = audioCtx.createMediaElementSource(audio);
+    sourceNodeMap[id] = sourceNode;
+  }
+
+  const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+  processorMap[id] = processor;
+
+  sourceNode.connect(processor);
+  processor.connect(audioCtx.destination);
+  sourceNode.connect(audioCtx.destination);
+
+  const CHUNK_SIZE = 3200;
+  const TARGET_SAMPLE_RATE = 16000;
+
+  processor.onaudioprocess = (e) => {
+    const input = e.inputBuffer.getChannelData(0);
+    const downsampled = downsampleBuffer(input, 48000, TARGET_SAMPLE_RATE);
+    const pcm = new Int16Array(downsampled.length);
+
+    for (let i = 0; i < downsampled.length; i++) {
+      const s = Math.max(-1, Math.min(1, downsampled[i]));
+      pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+
+    if (micWebSocket.readyState === WebSocket.OPEN) {
+      micWebSocket.send(pcm.buffer);
+    }
+  };
+
   isPlaying.value[id] = true;
+  audio.play();
 
   timerMap[id] = setInterval(() => {
     currentTime.value[id] = Math.floor(audio.currentTime);
@@ -1349,17 +1590,29 @@ const playAudio = (id) => {
     clearInterval(timerMap[id]);
     isPlaying.value[id] = false;
     currentTime.value[id] = 0;
+
+    if (processor) processor.disconnect();
+    processorMap[id] = null;
+    ok_AI_Broadcast.value = false;
   };
 };
 
 const pauseAudio = (id) => {
   const audio = audioMap.value[id];
   if (!audio) return;
+  ok_AI_Broadcast.value = false;
 
   audio.pause();
   isPlaying.value[id] = false;
   clearInterval(timerMap[id]);
+
+  const processor = processorMap[id];
+  if (processor) {
+    processor.disconnect();
+    processorMap[id] = null;
+  }
 };
+
 
 const formatTime = (seconds) => {
   const minutes = Math.floor(seconds / 60);
@@ -1577,32 +1830,6 @@ border-color: #4baf4f; /* 绿色边框 */
 border-color: #ffc107; /* 黄色边框 */
 }
 
-/* .chat-float-window {
-  position: fixed;
-  bottom: 60px;
-  right: 20px;
-  width: 450px;
-  max-width: 50vh;
-  max-height: 35vh;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 10px;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-  z-index: 9999;
-  overflow: hidden;
-}
-
-.container, .main, .box {
-  height: 100%;
-  padding: 0px;
-}
-
-#content {
-  height: auto;
-  max-height: 300px;
-  overflow-y: auto;
-  padding: 10px;
-} */
 .chat-float-window {
   position: fixed;
   bottom: 60px;
